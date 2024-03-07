@@ -33,7 +33,9 @@
             "Database\\Seeders\\": "database/seeders/"
         },
         "files": [
-            "app/Helpers/Alphapays.php"
+            "app/Helpers/Alphapays.php",
+            "app/Helpers/General.php",
+            "app/Helpers/Bucksbus.php"
         ]
     },
     "autoload-dev": {

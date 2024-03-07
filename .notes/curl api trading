@@ -1,0 +1,25 @@
+curl -L -X GET 'https://rest.coinapi.io/v1/exchangerate/btc' \
+-H 'Accept: text/plain' \
+-H 'X-CoinAPI-Key: 2BCF664A-8D38-4F7A-B754-E5A731C51C1D'
+
+curl -L -X GET 'https://rest.coinapi.io/v1/exchangerate/btc/usd' \
+-H 'Accept: text/plain' \
+-H 'X-CoinAPI-Key: 2BCF664A-8D38-4F7A-B754-E5A731C51C1D'
+
+
+curl -L -X GET 'https://rest.coinapi.io/v1/trades/btc/history' \
+-H 'Accept: text/plain' \
+-H 'X-CoinAPI-Key: 2BCF664A-8D38-4F7A-B754-E5A731C51C1D'
+
+curl -L -X GET 'https://rest.coinapi.io/v1/trades/btc/latest' \
+-H 'Accept: text/plain' \
+-H 'X-CoinAPI-Key: 2BCF664A-8D38-4F7A-B754-E5A731C51C1D'
+
+curl -L -X GET 'https://rest.coinapi.io/v1/exchangerate/history/periods' \
+-H 'Accept: text/plain' \
+-H 'X-CoinAPI-Key: 2BCF664A-8D38-4F7A-B754-E5A731C51C1D'
+
+
+curl -L -X GET 'https://rest.coinapi.io/v1/exchangerate/:assetBase/:assetQuote/history' \
+-H 'Accept: text/plain' \
+-H 'X-CoinAPI-Key: <API_KEY_VALUE>'
