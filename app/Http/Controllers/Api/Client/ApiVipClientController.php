@@ -28,6 +28,13 @@ class ApiVipClientController extends Controller
         $tradingCommission = Commission::where('user_id', auth()->user()->id)->where('type', 'Trading Commission')->sum('amount');
         $checkReferral = User::where('referral_id', auth()->user()->id)->pluck('id');
 
+        $monthlyData = UserTrading::whereIn('user_id', $checkReferral)->selectRaw('YEAR(created_at) AS year,MONTH(created_at) AS month, SUM(amount) AS total_amount')
+            ->groupByRaw('YEAR(created_at),MONTH(created_at) ')
+            ->get();
+
+        $monthlyDataAll = UserTrading::whereIn('user_id', $checkReferral)
+            ->where('status', 'Closed')
+            ->sum('amount');
         $startOfWeek = Carbon::now()->startOfWeek();
         $endOfWeek = Carbon::now()->endOfWeek();
 
@@ -38,6 +45,8 @@ class ApiVipClientController extends Controller
             ->sum('amount');
 
         return response()->json([
+            'allVolume' => $monthlyDataAll,
+            'monthly' => $monthlyData,
             'vip' => $getVip,
             'referral' => $myReferrals,
             'referralVip' => $myReferralsVip,
@@ -331,7 +340,7 @@ class ApiVipClientController extends Controller
     }
     public function getCommission()
     {
-        $commissions = Commission::where('user_id', auth()->user()->id)->get();
+        $commissions = Commission::where('user_id', auth()->user()->id)->orderBy('period', 'desc')->get();
         return response()->json(['message' => 'Commission Items', 'items' => $commissions], 200);
     }
 }

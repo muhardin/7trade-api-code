@@ -4,8 +4,11 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\ApiTestController;
 use App\Http\Controllers\Api\Client\Auth\AuthController;
 use App\Http\Controllers\Api\Client\ApiVipClientController;
+use App\Http\Controllers\Api\Client\Header\ApiHeaderClientController;
+use App\Http\Controllers\Api\Client\Mining\ApiMiningClientController;
 use App\Http\Controllers\Api\Client\Wallet\ApiWalletClientController;
 use App\Http\Controllers\Api\Client\Trading\ApiTradingClientController;
+use App\Http\Controllers\Api\Client\Trading\ApiTradingClientControllerDemo;
 
 /*
 |--------------------------------------------------------------------------
@@ -30,6 +33,7 @@ Route::get('/', function () {
 Route::group(['prefix' => 'trading'], function () {
     Route::post('/post-price', [ApiTradingClientController::class, 'storeCryptoPrice']);
     Route::get('/get-price', [ApiTradingClientController::class, 'getTradePrice']);
+    Route::get('/get-streak', [ApiTradingClientController::class, 'getStreak']);
 });
 
 
@@ -45,7 +49,9 @@ Route::controller(AuthController::class)->group(function () {
 });
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::group(['prefix' => 'client'], function () {
-
+        Route::prefix('header')->group(function () {
+            Route::get('/get-header', [ApiHeaderClientController::class, 'index']);
+        });
         Route::group(['prefix' => 'dashboard'], function () {
             Route::get('/details', [ApiTradingClientController::class, 'tradeDashboard']);
 
@@ -55,6 +61,16 @@ Route::middleware(['auth:sanctum'])->group(function () {
             Route::get('/histories-open', [ApiTradingClientController::class, 'indexOpen']);
             Route::post('/post-trade/{id}', [ApiTradingClientController::class, 'store']);
             Route::get('/trading-form', [ApiTradingClientController::class, 'tradingForm']);
+            Route::get('/trading-open-count', [ApiTradingClientController::class, 'getOpenTradeCount']);
+
+            Route::group(['prefix' => 'demo'], function () {
+                Route::get('/histories', [ApiTradingClientControllerDemo::class, 'index']);
+                Route::get('/histories-open', [ApiTradingClientControllerDemo::class, 'indexOpen']);
+                Route::get('/get-balance', [ApiTradingClientControllerDemo::class, 'getBalance']);
+                Route::post('/post-trade/{id}', [ApiTradingClientControllerDemo::class, 'store']);
+                Route::post('/post-reset', [ApiTradingClientControllerDemo::class, 'postReset']);
+                Route::get('/trading-form', [ApiTradingClientControllerDemo::class, 'tradingForm']);
+            });
 
 
         });
@@ -102,6 +118,14 @@ Route::middleware(['auth:sanctum'])->group(function () {
             Route::post('/upgrade', [ApiVipClientController::class, 'upgradeVip']);
             Route::get('/referral', [ApiVipClientController::class, 'getReferrals']);
             Route::get('/commission', [ApiVipClientController::class, 'getCommission']);
+        });
+        Route::prefix('mining')->group(function () {
+            Route::controller(ApiMiningClientController::class)->group(function () {
+                Route::get('get-mining', 'index');
+                Route::post('post-mining', 'store');
+                Route::get('get-mining-list', 'show');
+                Route::get('get-profit', 'getProfit');
+            });
         });
         Route::get('/asset-balance', [ApiWalletClientController::class, 'getBalanceAsset']);
         Route::post('/get-session', [AuthController::class, 'getUserSession']);

@@ -32,3 +32,4 @@ Route::get('send-mail', function () {
     dd("Email is Sent.");
 });
 Route::get('test', [TestController::class, 'index']);
+Route::get('test-emmit', [TestController::class, 'emitEvent']);

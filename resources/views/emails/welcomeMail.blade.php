@@ -180,12 +180,12 @@
                                                 role="presentation"
                                                 style="border-collapse:collapse;border-spacing:0px;">
                                                 <tbody>
-                                                    <tr>
-                                                        <td style="width:64px;">
+                                                    <tr  style="background-color: black;">
+                                                        <td style="width:120px;">
 
-                                                            <img height="auto" src="https://i.imgur.com/KO1vcE9.png"
+                                                            <img height="auto" src="{{ asset('/images/log-white.png') }}"
                                                                 style="border:0;display:block;outline:none;text-decoration:none;width:100%;"
-                                                                width="64" />
+                                                                width="120" />
 
                                                         </td>
                                                     </tr>
@@ -225,7 +225,7 @@
                                                     <td align="center" bgcolor="#2F67F6" role="presentation"
                                                         style="border:none;border-radius:3px;color:#ffffff;cursor:auto;padding:15px 25px;"
                                                         valign="middle">
-                                                        <a href="https://7trade.net"><p
+                                                        <a href="https://7trade.pro"><p
                                                             style="background:#2F67F6;color:#ffffff;font-family:'Helvetica Neue',Arial,sans-serif;font-size:15px;font-weight:normal;line-height:120%;Margin:0;text-decoration:none;text-transform:none;">
                                                             Login to Your Account
                                                         </p></a>
@@ -242,7 +242,7 @@
                                             <div
                                                 style="font-family:'Helvetica Neue',Arial,sans-serif;font-size:14px;line-height:20px;text-align:left;color:#525252;">
                                                 Best regards,<br><br> John S.<br>7Trade, CEO and Founder<br>
-                                                <a href="https://www.7trade.net" style="color:#2F67F6">7trade.net</a>
+                                                <a href="https://www.7trade.pro" style="color:#2F67F6">7trade.pro</a>
                                             </div>
 
                                         </td>

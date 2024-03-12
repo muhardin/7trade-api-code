@@ -149,13 +149,15 @@
                                                 style="border-collapse:collapse;border-spacing:0px;">
                                                 <tbody>
                                                     <tr>
-                                                        <td style="width:64px;">
+                                                        <tr  style="background-color: black;">
+                                                            <td style="width:120px;">
 
-                                                            <img height="auto" src="https://i.imgur.com/KO1vcE9.png"
-                                                                style="border:0;display:block;outline:none;text-decoration:none;width:100%;"
-                                                                width="64" />
+                                                                <img height="auto" src="{{ asset('/images/log-white.png') }}"
+                                                                    style="border:0;display:block;outline:none;text-decoration:none;width:100%;"
+                                                                    width="120" />
 
-                                                        </td>
+                                                            </td>
+                                                        </tr>
                                                     </tr>
                                                 </tbody>
                                             </table>
@@ -198,7 +200,7 @@
                                                     <tr>
                                                         <td style="width:128px;">
 
-                                                            <img height="auto" src="https://i.imgur.com/247tYSw.png"
+                                                            <img height="auto" src="/images/log-white.png"
                                                                 style="border:0;display:block;outline:none;text-decoration:none;width:100%;"
                                                                 width="128" />
 

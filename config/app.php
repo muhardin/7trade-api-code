@@ -185,4 +185,6 @@ return [
         // 'Example' => App\Facades\Example::class,
     ])->toArray(),
 
+    'socket_url' => env('SOCKET_IO_SERVER_URL'),
+
 ];
