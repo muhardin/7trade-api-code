@@ -57,7 +57,7 @@ class ApiMiningClientController extends Controller
         }
 
         $currentDate = Carbon::now();
-        $futureDate = $currentDate->addDays($mining->period + 1);
+        $futureDate = $currentDate->addDays($mining->period);
         $active_date = $currentDate->addDays(1);
 
         $trx = Str::uuid();
