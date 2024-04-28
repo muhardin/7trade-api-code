@@ -2,7 +2,6 @@
 
 namespace App\Console;
 
-use App\Models\UserMining;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
 
@@ -18,6 +17,7 @@ class Kernel extends ConsoleKernel
         $schedule->command('app:calculate-trading-volume')->dailyAt('22:00');
         $schedule->command('app:active-mining-list')->dailyAt('23:00');
         $schedule->command('app:check-user-mining')->dailyAt('23:00');
+        $schedule->command('app:check-manager-commission')->dailyAt('23:00');
         // $schedule->command('app:check-deposit')->everySecond();
     }
 

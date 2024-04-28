@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api\Client\Mining;
 
 use App\Http\Controllers\Controller;
 use App\Models\Mining;
+use App\Models\User;
 use App\Models\UserMining;
+use App\Models\UserSession;
 use App\Models\Wallet;
 use App\Models\WalletMining;
 use Carbon\Carbon;
@@ -28,6 +30,17 @@ class ApiMiningClientController extends Controller
 
     public function store(Request $request)
     {
+        $header = $request->header('Authorization');
+        $session = UserSession::where('token', $header)->first();
+        if (!@$session) {
+            return response()->json([
+                'message' => 'No Session Found', 'token' => $header],
+                201);
+        }
+        $user = User::find($session->user_id);
+        if (!$user) {
+            return response()->json(['message' => 'Access', 'error' => 'Invalid Account Access'], 201);
+        }
         $validator = Validator::make($request->all(), [
             'miningId' => 'required|exists:minings,id',
             'amount' => 'required|numeric|min:1',
@@ -42,15 +55,15 @@ class ApiMiningClientController extends Controller
         $daily_profit = $mining->daily_profit * $request->amount;
         $serviceFee = $mining->service_fee * $request->amount;
 
-        $checkMaximum = UserMining::where('mining_id', $mining->id)->where('user_id', auth()->id())->sum('count');
-        if ($checkMaximum > 1) {
+        $checkMaximum = UserMining::where('mining_id', $mining->id)->where('user_id', $user->id)->sum('count');
+        if ($checkMaximum > 0) {
             return response()->json([
                 'message' => 'You have reached the maximum limit for this mining plan.',
                 'error' => 'Maximum',
             ], 201);
         }
 
-        if (walletBalance(auth()->user()->id) < $amount) {
+        if (walletBalance($user->id) < $amount) {
             return response()->json([
                 'message' => 'Insufficient balance of your wallet',
                 'error' => 'Balance'], 201);
@@ -63,7 +76,7 @@ class ApiMiningClientController extends Controller
         $trx = Str::uuid();
 
         $userMining = new UserMining();
-        $userMining->user_id = auth()->user()->id;
+        $userMining->user_id = $user->id;
         $userMining->mining_id = $mining->id;
         $userMining->amount = $amount;
         $userMining->daily_profit = $daily_profit;
@@ -77,7 +90,7 @@ class ApiMiningClientController extends Controller
         $userMining->save();
 
         $walletSender = new Wallet();
-        $walletSender->user_id = auth()->user()->id;
+        $walletSender->user_id = $user->id;
         $walletSender->trx = @$trx;
         $walletSender->amount = $amount;
         $walletSender->description = 'Mining Order';
@@ -88,17 +101,39 @@ class ApiMiningClientController extends Controller
 
     }
 
-    public function show()
+    public function show(Request $request)
     {
-        $mining = UserMining::with(['Mining'])->orderBy('id', 'desc')->where('user_id', auth()->user()->id)->paginate(25);
+        $header = $request->header('Authorization');
+        $session = UserSession::where('token', $header)->first();
+        if (!@$session) {
+            return response()->json([
+                'message' => 'No Session Found'],
+                201);
+        }
+        $user = User::find($session->user_id);
+        if (!$user) {
+            return response()->json(['message' => 'Access', 'error' => 'Invalid Account Access'], 201);
+        }
+        $mining = UserMining::with(['Mining'])->orderBy('id', 'desc')->where('user_id', $user->id)->paginate(25);
         return response()->json([
             'mining' => $mining,
             'message' => 'Success',
         ], 200);
     }
-    public function getProfit()
+    public function getProfit(Request $request)
     {
-        $mining = WalletMining::where('user_id', auth()->user()->id)->paginate(25);
+        $header = $request->header('Authorization');
+        $session = UserSession::where('token', $header)->first();
+        if (!@$session) {
+            return response()->json([
+                'message' => 'No Session Found'],
+                201);
+        }
+        $user = User::find($session->user_id);
+        if (!$user) {
+            return response()->json(['message' => 'Access', 'error' => 'Invalid Account Access'], 201);
+        }
+        $mining = WalletMining::where('user_id', $user->id)->paginate(25);
         return response()->json([
             'mining' => $mining,
             'message' => 'Success',

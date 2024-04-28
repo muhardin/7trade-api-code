@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Client\ApiVipClientController;
 use App\Http\Controllers\Controller;
 use App\Models\Commission;
 use App\Models\User;
+use App\Models\UserSession;
 use App\Models\UserTrading;
 use App\Models\Vip;
 use App\Models\Wallet;
@@ -20,13 +21,25 @@ class ApiVipClientController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        $getVip = User::with('Vip')->find(auth()->user()->id);
-        $myReferrals = User::where('referral_id', auth()->user()->id)->count();
-        $myReferralsVip = User::where('referral_id', auth()->user()->id)->where('is_vip', '>', 0)->count();
-        $tradingCommission = Commission::where('user_id', auth()->user()->id)->where('type', 'Trading Commission')->sum('amount');
-        $checkReferral = User::where('referral_id', auth()->user()->id)->pluck('id');
+        $header = $request->header('Authorization');
+        $session = UserSession::where('token', $header)->first();
+        if (!@$session) {
+            return response()->json([
+                'message' => 'No Session Found'],
+                201);
+        }
+        $user = User::find($session->user_id);
+        if (!$user) {
+            return response()->json(['message' => 'Access', 'error' => 'Invalid Account Access'], 201);
+        }
+
+        $getVip = User::with('Vip')->find($user->id);
+        $myReferrals = User::where('referral_id', $user->id)->count();
+        $myReferralsVip = User::where('referral_id', $user->id)->where('is_vip', '>', 0)->count();
+        $tradingCommission = Commission::where('user_id', $user->id)->where('type', 'Trading Commission')->sum('amount');
+        $checkReferral = User::where('referral_id', $user->id)->pluck('id');
 
         $monthlyData = UserTrading::whereIn('user_id', $checkReferral)->selectRaw('YEAR(created_at) AS year,MONTH(created_at) AS month, SUM(amount) AS total_amount')
             ->groupByRaw('YEAR(created_at),MONTH(created_at) ')
@@ -60,12 +73,24 @@ class ApiVipClientController extends Controller
     /**
      * Show the form for creating a new resource.
      */
-    public function getVip()
+    public function getVip(Request $request)
     {
-        $getUser = User::with(['Vip'])->find(auth()->user()->id);
-        $default = Vip::where('id', '>', auth()->user()->vip_id)->orderBy('id', 'asc')->first();
-        $getVip = Vip::where('id', '>', auth()->user()->vip_id)->get();
-        $myReferrals = User::where('referral_id', auth()->user()->id)->get();
+        $header = $request->header('Authorization');
+        $session = UserSession::where('token', $header)->first();
+        if (!@$session) {
+            return response()->json([
+                'message' => 'No Session Found'],
+                201);
+        }
+        $user = User::find($session->user_id);
+        if (!$user) {
+            return response()->json(['message' => 'Access', 'error' => 'Invalid Account Access'], 201);
+        }
+
+        $getUser = User::with(['Vip'])->find($user->id);
+        $default = Vip::where('id', '>', $user->vip_id)->orderBy('id', 'asc')->first();
+        $getVip = Vip::where('id', '>', $user->vip_id)->get();
+        $myReferrals = User::where('referral_id', $user->id)->get();
         return response()->json([
             'default' => $default,
             'user' => $getUser,
@@ -75,11 +100,21 @@ class ApiVipClientController extends Controller
         ],
             200);
     }
-    public function getReferrals()
+    public function getReferrals(Request $request)
     {
-
+        $header = $request->header('Authorization');
+        $session = UserSession::where('token', $header)->first();
+        if (!@$session) {
+            return response()->json([
+                'message' => 'No Session Found'],
+                201);
+        }
+        $user = User::find($session->user_id);
+        if (!$user) {
+            return response()->json(['message' => 'Access', 'error' => 'Invalid Account Access'], 201);
+        }
         $referrals = User::with('Vip')
-            ->where('referral_id', auth()->user()->id)
+            ->where('referral_id', $user->id)
             ->get();
 
         foreach ($referrals as $referral) {
@@ -120,19 +155,31 @@ class ApiVipClientController extends Controller
             'code' => 'required|string',
         ]);
 
+        $header = $request->header('Authorization');
+        $session = UserSession::where('token', $header)->first();
+        if (!@$session) {
+            return response()->json([
+                'message' => 'No Session Found'],
+                201);
+        }
+        $user = User::find($session->user_id);
+        if (!$user) {
+            return response()->json(['message' => 'Access', 'error' => 'Invalid Account Access'], 201);
+        }
+
         if ($validator->fails()) {
             return response()->json(['error' => $validator->errors()], 201);
         }
-        if (auth()->user()->google2fa_enable != 'Yes') {
+        if ($user->google2fa_enable != 'Yes') {
             return response()->json(['message' => '2FA Authenticator is disable', 'error' => $request->termsChecked], 201);
         }
 
-        if (walletBalance(auth()->user()->id) < 100) {
+        if (walletBalance($user->id) < 100) {
             return response()->json(['message' => 'Invalid input', 'error' => 'Insufficient balance'], 201);
         }
 
         $google2fa = app('pragmarx.google2fa');
-        $oneCode = $google2fa->verifyKey(auth()->user()->google2fa_secret, $request->code);
+        $oneCode = $google2fa->verifyKey($user->google2fa_secret, $request->code);
         if (!$oneCode) {
             return response()->json([
                 'message' => 'Invalid 2FA Code'],
@@ -140,7 +187,7 @@ class ApiVipClientController extends Controller
         }
         $trx = Str::uuid();
         $wallet = new Wallet();
-        $wallet->user_id = auth()->user()->id;
+        $wallet->user_id = $user->id;
         $wallet->trx = @$trx;
         $wallet->amount = 100;
         $wallet->description = 'Register VIP';
@@ -148,14 +195,14 @@ class ApiVipClientController extends Controller
         $wallet->type = 'Out';
         $wallet->save();
 
-        $user = User::with(['Referral'])->find(auth()->user()->id);
+        $user = User::with(['Referral'])->find($user->id);
         $user->is_vip = 1;
         $user->save();
 
         $sendAmount = 100;
         $created_at = $wallet->created_at;
-        $email = auth()->user()->email;
-        $name = auth()->user()->first_name;
+        $email = $user->email;
+        $name = $user->first_name;
 
         $content = '<div style="font-size: 12px; line-height: 1.2; color: #555555; font-family: " Lato", Tahoma, Verdana,
         Segoe, sans-serif; mso-line-height-alt: 14px;">
@@ -251,6 +298,17 @@ class ApiVipClientController extends Controller
 
     public function upgradeVip(Request $request)
     {
+        $header = $request->header('Authorization');
+        $session = UserSession::where('token', $header)->first();
+        if (!@$session) {
+            return response()->json([
+                'message' => 'No Session Found'],
+                201);
+        }
+        $user = User::find($session->user_id);
+        if (!$user) {
+            return response()->json(['message' => 'Access', 'error' => 'Invalid Account Access'], 201);
+        }
         $validator = Validator::make($request->all(), [
             'termsChecked' => 'required|accepted',
             'code' => 'required|string',
@@ -260,7 +318,7 @@ class ApiVipClientController extends Controller
         if ($validator->fails()) {
             return response()->json(['error' => $validator->errors()], 201);
         }
-        if (auth()->user()->google2fa_enable != 'Yes') {
+        if ($user->google2fa_enable != 'Yes') {
             return response()->json(['message' => '2FA Authenticator is disable', 'error' => $request->termsChecked], 201);
         }
 
@@ -270,12 +328,12 @@ class ApiVipClientController extends Controller
             return response()->json(['message' => 'Invalid input', 'error' => 'Vip not found'], 201);
         }
 
-        if (walletBalance(auth()->user()->id) < $vip->price) {
+        if (walletBalance($user->id) < $vip->price) {
             return response()->json(['message' => 'Insufficient balance', 'error' => 'Insufficient balance'], 201);
         }
 
         $google2fa = app('pragmarx.google2fa');
-        $oneCode = $google2fa->verifyKey(auth()->user()->google2fa_secret, $request->code);
+        $oneCode = $google2fa->verifyKey($user->google2fa_secret, $request->code);
         if (!$oneCode) {
             return response()->json([
                 'message' => 'Invalid 2FA Code'],
@@ -283,7 +341,7 @@ class ApiVipClientController extends Controller
         }
         $trx = Str::uuid();
         $wallet = new Wallet();
-        $wallet->user_id = auth()->user()->id;
+        $wallet->user_id = $user->id;
         $wallet->trx = @$trx;
         $wallet->amount = $vip->price;
         $wallet->description = 'Upgrade VIP to ' . $vip->name;
@@ -291,14 +349,14 @@ class ApiVipClientController extends Controller
         $wallet->type = 'Out';
         $wallet->save();
 
-        $user = User::with(['Referral'])->find(auth()->user()->id);
+        $user = User::with(['Referral'])->find($user->id);
         $user->vip_id = $vip->id;
         $user->save();
 
         $sendAmount = $vip->price;
         $created_at = $wallet->created_at;
-        $email = auth()->user()->email;
-        $name = auth()->user()->first_name;
+        $email = $user->email;
+        $name = $user->first_name;
 
         $content = '<div style="font-size: 12px; line-height: 1.2; color: #555555; font-family: " Lato", Tahoma, Verdana,
         Segoe, sans-serif; mso-line-height-alt: 14px;">
@@ -338,9 +396,25 @@ class ApiVipClientController extends Controller
 
         return response()->json(['message' => 'VIP updated successfully'], 200);
     }
-    public function getCommission()
+    public function getCommission(Request $request)
     {
-        $commissions = Commission::where('user_id', auth()->user()->id)->orderBy('period', 'desc')->get();
-        return response()->json(['message' => 'Commission Items', 'items' => $commissions], 200);
+        try {
+            $header = $request->header('Authorization');
+            $session = UserSession::where('token', $header)->first();
+            if (!@$session) {
+                return response()->json([
+                    'message' => 'No Session Found'],
+                    201);
+            }
+            $user = User::find($session->user_id);
+            if (!$user) {
+                return response()->json(['message' => 'Access', 'error' => 'Invalid Account Access'], 201);
+            }
+            $commissions = Commission::where('user_id', $user->id)->orderBy('period', 'desc')->get();
+            return response()->json(['message' => 'Commission Items', 'items' => $commissions], 200);
+        } catch (\Throwable $th) {
+            return response()->json(['message' => 'Commission Items', 'error' => $th], 500);
+        }
+
     }
 }

@@ -5,8 +5,11 @@ namespace App\Http\Controllers\Api\Client\Trading;
 use App\Http\Controllers\Controller;
 use App\Models\CryptoPrice;
 use App\Models\StreakChallenge;
+use App\Models\User;
+use App\Models\UserSession;
 use App\Models\UserTrading;
 use App\Models\UserTradingDemo;
+use App\Models\WalletAdmin;
 use App\Models\WalletTrading;
 use App\Models\WalletTradingDemo;
 use Illuminate\Http\Request;
@@ -19,17 +22,28 @@ class ApiTradingClientController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
+        $header = $request->header('Authorization');
+        $session = UserSession::where('token', $header)->first();
+        if (!@$session) {
+            return response()->json([
+                'message' => 'No Session Found'],
+                201);
+        }
+        $user = User::find($session->user_id);
+        if (!$user) {
+            return response()->json(['message' => 'Access', 'error' => 'Invalid Account Access'], 201);
+        }
         if (@$_GET['limit']) {
-            $tradings = UserTrading::where('user_id', auth()->user()->id)->where('status', 'Closed')->orderby('id', 'desc')->paginate($_GET['limit']);
+            $tradings = UserTrading::where('user_id', $user->id)->where('status', 'Closed')->orderby('id', 'desc')->paginate($_GET['limit']);
             return response()->json([
                 'items' => $tradings,
                 'message' => 'Success',
             ],
                 200);
         } else {
-            $tradings = UserTrading::where('user_id', auth()->user()->id)->where('status', 'Closed')->orderby('id', 'desc')->paginate(10);
+            $tradings = UserTrading::where('user_id', $user->id)->where('status', 'Closed')->orderby('id', 'desc')->paginate(10);
             return response()->json([
                 'items' => $tradings,
                 'message' => 'Success',
@@ -40,7 +54,7 @@ class ApiTradingClientController extends Controller
     }
     public function tradingForm()
     {
-        $tradings = UserTrading::where('status', 'Open')->orderby('id', 'desc')->get();
+        $tradings = UserTrading::where('status', 'open')->orderby('id', 'desc')->get();
         //setup the percentage
         $count = $tradings->count();
         $countBuy = $tradings->where('action', 'Buy')->count();
@@ -65,14 +79,14 @@ class ApiTradingClientController extends Controller
     public function indexOpen()
     {
         if (@$_GET['limit']) {
-            $tradings = UserTrading::where('user_id', auth()->user()->id)->where('status', 'Open')->orderby('id', 'desc')->paginate($_GET['limit']);
+            $tradings = UserTrading::where('user_id', auth()->user()->id)->where('status', 'open')->orderby('id', 'desc')->paginate($_GET['limit']);
             return response()->json([
                 'items' => $tradings,
                 'message' => 'Success',
             ],
                 200);
         } else {
-            $tradings = UserTrading::where('user_id', auth()->user()->id)->where('status', 'Open')->orderby('id', 'desc')->paginate(10);
+            $tradings = UserTrading::where('user_id', auth()->user()->id)->where('status', 'open')->orderby('id', 'desc')->paginate(10);
             return response()->json([
                 'items' => $tradings,
                 'message' => 'Success',
@@ -81,9 +95,20 @@ class ApiTradingClientController extends Controller
         }
 
     }
-    public function tradeDashboard()
+    public function tradeDashboard(Request $request)
     {
-        $tradings = UserTrading::where('user_id', auth()->user()->id)->whereIn('action', ['Buy', 'Sell'])->orderby('id', 'desc')->get();
+        $header = $request->header('Authorization');
+        $session = UserSession::where('token', $header)->first();
+        if (!@$session) {
+            return response()->json([
+                'message' => 'No Session Found'],
+                201);
+        }
+        $user = User::find($session->user_id);
+        if (!$user) {
+            return response()->json(['message' => 'Access', 'error' => 'Invalid Account Access'], 201);
+        }
+        $tradings = UserTrading::where('user_id', $user->id)->whereIn('action', ['Buy', 'Sell'])->orderby('id', 'desc')->get();
 
         $totalRevenue = $tradings->sum('final_amount');
         $totalProfit = $tradings->sum('profit_amount');
@@ -98,6 +123,7 @@ class ApiTradingClientController extends Controller
         $totalSell = $tradings->where('action', 'Sell')->sum('amount');
         $percentBuy = ($totalBuy / $totalTradeAmount) * 100;
         $percentSell = ($totalSell / $totalTradeAmount) * 100;
+
         return response()->json([
             'items' => $tradings,
             'totalTrade' => $totalTrade,
@@ -144,9 +170,9 @@ class ApiTradingClientController extends Controller
             return response()->json(['message' => 'Invalid Amount', 'error' => 'Insufficient balance'], 201);
         }
         $trx = Str::uuid();
-        $profit_amount = $request->amount * 0.95;
+        $profit_amount = $request->amount * (70 / 100);
         $final_amount = $request->amount + $profit_amount;
-        $profit_value = 0.95;
+        $profit_value = 70 / 100;
 
         $userTrading = new UserTrading();
         $userTrading->trx = $trx;
@@ -156,7 +182,7 @@ class ApiTradingClientController extends Controller
         $userTrading->profit_value = $profit_value;
         $userTrading->profit_amount = $profit_amount;
         $userTrading->final_amount = $request->amount + $profit_amount;
-        $userTrading->status = 'Open';
+        $userTrading->status = open;
         $userTrading->save();
 
         $exchange = new WalletTrading();
@@ -204,17 +230,16 @@ class ApiTradingClientController extends Controller
                 // logic for update win or lose trading
                 /** If data with the timestamp doesn't exist, create a new record but create logic for win or lose the preview data */
                 //check the last Data
-                $tradingCount = UserTrading::where('status', 'Open')->count();
+                $tradingCount = UserTrading::where('status', 'open')->count();
                 if (@$tradingCount > 0) {
                     $checkLastPrev = CryptoPrice::orderBy('id', 'desc')->skip(1)->first();
                     $checkLast = CryptoPrice::orderBy('id', 'desc')->first();
 
                     //check the trade put
-                    $tradingBuy = UserTrading::where('status', 'Open')->where('action', 'Buy')->sum('amount');
-                    $tradingSell = UserTrading::where('status', 'Open')->where('action', 'Sell')->sum('amount');
+                    $tradingBuy = UserTrading::where('status', 'open')->where('action', 'Buy')->sum('amount');
+                    $tradingSell = UserTrading::where('status', 'open')->where('action', 'Sell')->sum('amount');
                     if ($tradingBuy < @$tradingSell) {
                         $setProfit = 'Buy';
-
                         if ($checkLast->close < $checkLastPrev->close) {
                             $newClose = $checkLastPrev->close + 0.01;
                             \DB::table('crypto_prices')->where('id', $checkLast->id)->update(['close' => $newClose, 'is_updated' => 'Yes']);
@@ -222,9 +247,24 @@ class ApiTradingClientController extends Controller
                             $newClose = $checkLast->close;
                         }
 
-                        \DB::table('user_tradings')->where('status', 'Open')->where('action', 'Sell')->update(['is_profit' => 'No', 'status' => 'closed', 'final_amount' => 0, 'close_price' => $newClose, 'base_price' => $checkLastPrev->close]);
+                        //insert wallet_admins
+                        $trxWalletAdmin = Str::uuid();
+                        $tradingBuyFinal = UserTrading::where('status', 'open')->where('action', 'Buy')->sum('final_amount');
+                        $profitAdmin = $tradingSell - $tradingBuyFinal;
+                        $finalProfit = $profitAdmin - ($profitAdmin * 0.2);
 
-                        $tradingProfit = UserTrading::where('status', 'Open')->where('action', 'Buy')->get();
+                        $walletAdmin = new WalletAdmin();
+                        $walletAdmin->trx = $trxWalletAdmin;
+                        $walletAdmin->type = 'In';
+                        $walletAdmin->amount = $profitAdmin;
+                        $walletAdmin->description = 'Company Profit';
+                        $walletAdmin->save();
+
+                        /** end of wallet admin */
+
+                        \DB::table('user_tradings')->where('status', 'open')->where('action', 'Sell')->update(['is_profit' => 'No', 'status' => 'closed', 'final_amount' => 0, 'close_price' => $newClose, 'base_price' => $checkLastPrev->close]);
+
+                        $tradingProfit = UserTrading::where('status', 'open')->where('action', 'Buy')->get();
                         foreach ($tradingProfit as $item) {
                             \DB::table('user_tradings')->where('id', $item->id)->update(['is_profit' => 'Yes', 'status' => 'closed', 'close_price' => $newClose, 'base_price' => $checkLastPrev->close]);
                             //setup wallet profit
@@ -240,7 +280,7 @@ class ApiTradingClientController extends Controller
                         }
 
                     } elseif ($tradingBuy == @$tradingSell) {
-                        $tradingProfit = UserTrading::where('status', 'Open')->get();
+                        $tradingProfit = UserTrading::where('status', 'open')->get();
                         foreach ($tradingProfit as $item) {
                             \DB::table('user_tradings')->where('id', $item->id)->update(['is_profit' => 'Yes', 'status' => 'closed']);
                             //setup wallet profit
@@ -265,10 +305,21 @@ class ApiTradingClientController extends Controller
                         } else {
                             $newClose = $checkLast->close;
                         }
+                        //insert wallet_admins
+                        $trxWalletAdmin = Str::uuid();
+                        $tradingSellFinal = UserTrading::where('status', 'open')->where('action', 'Sell')->sum('final_amount');
+                        $profitAdmin = $tradingBuy - $tradingSellFinal;
+                        $finalProfit = $profitAdmin - ($profitAdmin * 0.2);
+                        $walletAdmin = new WalletAdmin();
+                        $walletAdmin->trx = $trxWalletAdmin;
+                        $walletAdmin->type = 'In';
+                        $walletAdmin->amount = $finalProfit;
+                        $walletAdmin->description = 'Company Profit';
+                        $walletAdmin->save();
+                        /** end of wallet admin */
+                        \DB::table('user_tradings')->where('status', 'open')->where('action', 'Buy')->update(['is_profit' => 'No', 'status' => 'closed', 'final_amount' => 0, 'close_price' => $newClose, 'base_price' => $checkLastPrev->close]);
 
-                        \DB::table('user_tradings')->where('status', 'Open')->where('action', 'Buy')->update(['is_profit' => 'No', 'status' => 'closed', 'final_amount' => 0, 'close_price' => $newClose, 'base_price' => $checkLastPrev->close]);
-
-                        $tradingProfit = UserTrading::where('status', 'Open')->where('action', 'Sell')->get();
+                        $tradingProfit = UserTrading::where('status', 'open')->where('action', 'Sell')->get();
                         foreach ($tradingProfit as $item) {
                             \DB::table('user_tradings')->where('id', $item->id)->update(['is_profit' => 'Yes', 'status' => 'closed', 'close_price' => $newClose, 'base_price' => $checkLastPrev->close]);
                             //setup wallet profit
@@ -287,14 +338,14 @@ class ApiTradingClientController extends Controller
                 /** End Of ode For Trading Profit Calculation */
 
                 /** Code For Trading Profit Calculation of Demo */
-                $tradingCount = UserTradingDemo::where('status', 'Open')->count();
+                $tradingCount = UserTradingDemo::where('status', 'open')->count();
                 if (@$tradingCount > 0) {
                     $checkLastPrev = CryptoPrice::orderBy('id', 'desc')->skip(1)->first();
                     $checkLast = CryptoPrice::orderBy('id', 'desc')->first();
 
                     if ($checkLast->close > $checkLastPrev->close) {
-                        \DB::table('user_trading_demos')->where('status', 'Open')->where('action', 'Sell')->update(['is_profit' => 'No', 'status' => 'closed', 'final_amount' => 0]);
-                        $tradingProfit = UserTradingDemo::where('status', 'Open')->where('action', 'Buy')->get();
+                        \DB::table('user_trading_demos')->where('status', 'open')->where('action', 'Sell')->update(['is_profit' => 'No', 'status' => 'closed', 'final_amount' => 0]);
+                        $tradingProfit = UserTradingDemo::where('status', 'open')->where('action', 'Buy')->get();
                         foreach ($tradingProfit as $item) {
                             \DB::table('user_trading_demos')->where('id', $item->id)->update(['is_profit' => 'Yes', 'status' => 'closed']);
                             //setup wallet profit
@@ -310,7 +361,7 @@ class ApiTradingClientController extends Controller
                         }
                         \DB::table('user_trading_demos')->where('id', $item->id)->update(['is_profit' => 'Yes', 'status' => 'closed']);
                     } elseif ($checkLast->close == $checkLastPrev->close) {
-                        $tradingProfit = UserTradingDemo::where('status', 'Open')->get();
+                        $tradingProfit = UserTradingDemo::where('status', 'open')->get();
                         foreach ($tradingProfit as $item) {
                             \DB::table('user_trading_demos')->where('id', $item->id)->update(['is_profit' => 'Yes', 'status' => 'closed']);
                             //setup wallet profit
@@ -325,8 +376,8 @@ class ApiTradingClientController extends Controller
                             //later setup email notification
                         }
                     } else {
-                        \DB::table('user_trading_demos')->where('status', 'Open')->where('action', 'Buy')->update(['is_profit' => 'No', 'status' => 'closed', 'final_amount' => 0]);
-                        $tradingProfit = UserTradingDemo::where('status', 'Open')->where('action', 'Sell')->get();
+                        \DB::table('user_trading_demos')->where('status', 'open')->where('action', 'Buy')->update(['is_profit' => 'No', 'status' => 'closed', 'final_amount' => 0]);
+                        $tradingProfit = UserTradingDemo::where('status', 'open')->where('action', 'Sell')->get();
                         foreach ($tradingProfit as $item) {
                             \DB::table('user_trading_demos')->where('id', $item->id)->update(['is_profit' => 'Yes', 'status' => 'closed']);
                             $trx = Str::uuid();
@@ -478,12 +529,13 @@ class ApiTradingClientController extends Controller
         ], 200);
 
     }
-    public function getOpenTradeCount(){
-        $tradings = UserTrading::where('user_id', auth()->user()->id)->where('status', 'Open')->count();
-            return response()->json([
-                'items' => $tradings,
-                'message' => 'Success',
-            ],
-                200);
+    public function getOpenTradeCount()
+    {
+        $tradings = UserTrading::where('user_id', auth()->user()->id)->where('status', 'open')->count();
+        return response()->json([
+            'items' => $tradings,
+            'message' => 'Success',
+        ],
+            200);
     }
 }

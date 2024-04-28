@@ -7,6 +7,7 @@ use App\Models\Cryptocurrency;
 use App\Models\Exchange;
 use App\Models\User;
 use App\Models\UserCrypto;
+use App\Models\UserSession;
 use App\Models\Wallet;
 use App\Models\WalletTrading;
 use App\Models\Withdraw;
@@ -24,14 +25,14 @@ class ApiWalletClientController extends Controller
     public function index()
     {
         if (@$_GET['limit']) {
-            $wallets = Wallet::where('user_id', auth()->user()->id)->orderby('id', 'desc')->paginate(@$_GET['limit']);
+            $wallets = Wallet::where('user_id', $user->id)->orderby('id', 'desc')->paginate(@$_GET['limit']);
             return response()->json([
                 'items' => $wallets,
                 'message' => 'Success',
             ],
                 200);
         } else {
-            $wallets = Wallet::where('user_id', auth()->user()->id)->orderby('id', 'desc')->paginate(10);
+            $wallets = Wallet::where('user_id', $user->id)->orderby('id', 'desc')->paginate(10);
             return response()->json([
                 'items' => $wallets,
                 'message' => 'Success',
@@ -49,7 +50,7 @@ class ApiWalletClientController extends Controller
         $crypto = AlphaCreateAddress($coin, $network, $merchant_transaction_id);
         // dd($crypto);
         $userCrypto = new UserCrypto();
-        $userCrypto->user_id = auth()->user()->id;
+        $userCrypto->user_id = $user->id;
         $userCrypto->crypto_id = 1;
         $userCrypto->crypto_name = 'USDT';
         $userCrypto->crypto_code = 'USDT BEP20';
@@ -61,9 +62,38 @@ class ApiWalletClientController extends Controller
             'message' => 'Address Created'],
             201);
     }
+    public function createDepositAddressPublic(Request $request)
+    {
+        $header = $request->header('Authorization');
+        $session = UserSession::where('token', $header)->first();
+        if (!@$session) {
+            return response()->json([
+                'message' => 'No Session Found'],
+                201);
+        }
+        $user = User::find($session->user_id);
+
+        $merchant_transaction_id = IdGenerator::generate(['table' => 'user_cryptos', 'field' => 'merchant_transaction_id', 'length' => 9, 'prefix' => 'MRC']);
+        $coin = 'USDT';
+        $network = 'bsc-bep20';
+        $crypto = AlphaCreateAddress($coin, $network, $merchant_transaction_id, $session->user_id);
+        // dd($crypto);
+        // $userCrypto = new UserCrypto();
+        // $userCrypto->user_id = $user->id;
+        // $userCrypto->crypto_id = 1;
+        // $userCrypto->crypto_name = 'USDT';
+        // $userCrypto->crypto_code = 'USDT BEP20';
+        // $userCrypto->crypto_address = $crypto['address'];
+        // $userCrypto->merchant_transaction_id = $merchant_transaction_id;
+        // $userCrypto->save();
+
+        return response()->json([
+            'message' => 'Address Created', 'address' => $crypto['address'], 'merchant_transaction_id' => $merchant_transaction_id],
+            200);
+    }
     public function getDepositAddress()
     {
-        $userCrypto = UserCrypto::where('user_id', auth()->user()->id)->orderBy('id', 'desc')->first();
+        $userCrypto = UserCrypto::where('user_id', $user->id)->orderBy('id', 'desc')->first();
 
         if (!$userCrypto) {
             return response()->json([
@@ -78,8 +108,8 @@ class ApiWalletClientController extends Controller
     }
     public function getBalance()
     {
-        $userCryptoIn = Wallet::where('user_id', auth()->user()->id)->where('type', 'In')->sum('amount');
-        $userCryptoOut = Wallet::where('user_id', auth()->user()->id)->where('type', 'Out')->sum('amount');
+        $userCryptoIn = Wallet::where('user_id', $user->id)->where('type', 'In')->sum('amount');
+        $userCryptoOut = Wallet::where('user_id', $user->id)->where('type', 'Out')->sum('amount');
         $balance = $userCryptoIn - $userCryptoOut;
 
         return response()->json([
@@ -90,7 +120,7 @@ class ApiWalletClientController extends Controller
     }
     public function getBalanceAsset()
     {
-        $balance = walletBalance(auth()->user()->id) + WalletTradingBalance(auth()->user()->id);
+        $balance = walletBalance($user->id) + WalletTradingBalance($user->id);
         if (!$balance) {
             $bl = 0;
         } else {
@@ -125,16 +155,31 @@ class ApiWalletClientController extends Controller
         if ($validator->fails()) {
             return response()->json(['error' => $validator->errors()], 201);
         }
-        if (auth()->user()->google2fa_enable != 'Yes') {
+        $header = $request->header('Authorization');
+        $session = UserSession::where('token', $header)->first();
+        if (!@$session) {
+            return response()->json([
+                'message' => 'No Session Found'],
+                201);
+        }
+        $user = User::find($session->user_id);
+        if (!$user) {
+            return response()->json(['message' => 'Access', 'error' => 'Invalid Account Access'], 201);
+        }
+
+        if ($user->is_agent == 1) {
+            return response()->json(['message' => 'You are not allowed to withdraw'], 201);
+        }
+        if ($user->google2fa_enable != 'Yes') {
             return response()->json(['message' => '2FA Authenticator is disable'], 201);
         }
 
-        if (walletBalance(auth()->user()->id) < $request->amount) {
+        if (walletBalance($user->id) < $request->amount) {
             return response()->json(['message' => 'Invalid input', 'error' => 'Insufficient balance'], 201);
         }
 
         $google2fa = app('pragmarx.google2fa');
-        $oneCode = $google2fa->verifyKey(auth()->user()->google2fa_secret, $request->code);
+        $oneCode = $google2fa->verifyKey($user->google2fa_secret, $request->code);
         if (!$oneCode) {
             return response()->json([
                 'message' => 'Invalid 2FA Code'],
@@ -150,7 +195,7 @@ class ApiWalletClientController extends Controller
         $address = $request->address;
         $amount = $amountToTransfer;
         $orderId = IdGenerator::generate(['table' => 'user_cryptos', 'field' => 'merchant_transaction_id', 'length' => 9, 'prefix' => 'MRC']);
-        $receiverId = auth()->user()->id;
+        $receiverId = $user->id;
         $wd = AlphaCreateWd($coin, $network, $address, $amount, $orderId, $receiverId);
         if ($wd->success == false) {
             return response()->json([
@@ -161,7 +206,7 @@ class ApiWalletClientController extends Controller
         $crypto = Cryptocurrency::where('id', 1)->first();
 
         $walletSender = new Wallet();
-        $walletSender->user_id = auth()->user()->id;
+        $walletSender->user_id = $user->id;
         $walletSender->trx = @$wd->txId;
         $walletSender->amount = $request->amount;
         $walletSender->description = 'Withdraw';
@@ -170,7 +215,7 @@ class ApiWalletClientController extends Controller
         $walletSender->save();
 
         $withdraw = new Withdraw();
-        $withdraw->user_id = auth()->user()->id;
+        $withdraw->user_id = $user->id;
         $withdraw->txid = @$wd->txId;
         $withdraw->transaction_code = $orderId;
         $withdraw->status = @$wd->status;
@@ -196,8 +241,8 @@ class ApiWalletClientController extends Controller
         $cost = $fee;
         $receiveAmount = $request->amount;
         $created_at = $withdraw->created_at;
-        $email = auth()->user()->email;
-        $name = auth()->user()->first_name;
+        $email = $user->email;
+        $name = $user->first_name;
 
         $content = '<div style="font-size: 12px; line-height: 1.2; color: #555555; font-family: " Lato", Tahoma, Verdana,
         Segoe, sans-serif; mso-line-height-alt: 14px;">
@@ -242,9 +287,130 @@ class ApiWalletClientController extends Controller
 
         return response()->json(['message' => 'Withdrawal successful'], 200);
     }
-    public function getTradingBalance()
+    public function postWithdrawApi(Request $request)
     {
-        $balance = WalletTradingBalance(auth()->user()->id);
+        // Validate the request data
+        $validator = Validator::make($request->all(), [
+            'amount' => 'required|numeric',
+            'address' => 'required|string',
+            'code' => 'required|string',
+            'memo' => 'nullable|string',
+        ], [
+            'amount.required' => 'The amount field is required.',
+            'amount.numeric' => 'The amount must be a number.',
+            'code.required' => 'The 2FA field is required.',
+            'address.required' => 'The address field is required.',
+            'address.string' => 'The address must be a string.',
+        ]);
+        // Check if validation fails
+        if ($validator->fails()) {
+            return response()->json(['error' => $validator->errors()], 201);
+        }
+        $header = $request->header('Authorization');
+        $session = UserSession::where('token', $header)->first();
+        if (!@$session) {
+            return response()->json([
+                'message' => 'No Session Found'],
+                201);
+        }
+        $user = User::find($session->user_id);
+        if (!$user) {
+            return response()->json(['message' => 'Access', 'error' => 'Invalid Account Access'], 201);
+        }
+
+        // Create a new withdrawal record
+        $fee = (2.5 / 100) * $request->amount;
+        $amountToTransfer = $request->amount - $fee;
+
+        $coin = 'USDT';
+        $network = 'bsc-bep20';
+        $address = $request->address;
+        $amount = $amountToTransfer;
+        $orderId = IdGenerator::generate(['table' => 'user_cryptos', 'field' => 'merchant_transaction_id', 'length' => 9, 'prefix' => 'MRC']);
+        $receiverId = $user->id;
+        $wd = AlphaCreateWd($coin, $network, $address, $amount, $orderId, $receiverId);
+        if ($wd->success == false) {
+            return response()->json([
+                'withdraw' => $wd,
+                'message' => $wd->msg],
+                201);
+        }
+        $crypto = Cryptocurrency::where('id', 1)->first();
+
+        $withdraw = Withdraw::find($request->wid);
+        $withdraw->txid = @$wd->txId;
+        $withdraw->status = @$wd->status;
+        $withdraw->crypto_date = now();
+        $withdraw->explorer_url = $request->input('explorer_url');
+        $withdraw->transaction_fees = $fee;
+        $withdraw->processing_fees = $fee;
+        $withdraw->crypto_fees = $fee;
+        $withdraw->save();
+
+        $sendAmount = $request->amount;
+        $cost = $fee;
+        $receiveAmount = $request->amount;
+        $created_at = $withdraw->created_at;
+        $email = $user->email;
+        $name = $user->first_name;
+
+        $content = '<div style="font-size: 12px; line-height: 1.2; color: #555555; font-family: " Lato", Tahoma, Verdana,
+        Segoe, sans-serif; mso-line-height-alt: 14px;">
+        <p style = "line-height: 1.2; word-break: break-word; font-size: 16px; mso-line-height-alt: 19px; margin: 0;">
+            <b><strong>Hello! ' . @$name . '</strong></b></p>
+        <p style = "line-height: 1.2; word-break: break-word; font-size: 16px; mso-line-height-alt: 19px; margin: 0;">
+            &nbsp;
+        </p>
+        <p style = "line-height: 1.2; word-break: break-word; font-size: 16px; mso-line-height-alt: 19px; margin: 0;">
+            Congratulations your withdraw has been processed.<br>
+        </p><br>
+
+        <table width = "328" border = "0">
+            <tbody>
+                <tr>
+                    <td>Wallet Amount</td>
+                    <td align = "center">:</td>
+                    <td>' . $sendAmount . ' USD</td>
+                </tr>
+                <tr>
+                    <td>Transaction Fee</td>
+                    <td align = "center">:</td>
+                    <td>' . $cost . ' USD</td>
+                </tr>
+                <tr>
+                    <td>Receive Amount</td>
+                    <td align = "center">:</td>
+                    <td>' . $receiveAmount . ' USD</td>
+                </tr>
+                <tr>
+                    <td>Date/Time</td>
+                    <td  align = "center">                             : </td>
+                    <td>' . Carbon::parse($created_at)->format('Y-m-d H: i: s') . '</td>
+                </tr>
+            </tbody>
+        </table>
+        <p style = "line-height: 1.2; word-break: break-word; font-size: 16px; mso-line-height-alt: 19px; margin: 0;">
+            &nbsp;</p>
+        </p>
+    </div>';
+        \Mail::to($email)->bcc('dexgame88@gmail.com')->send(new \App\Mail\BaseMail($content, "Withdraw"));
+
+        return response()->json(['message' => 'Withdrawal successful'], 200);
+    }
+    public function getTradingBalance(Request $request)
+    {
+        $header = $request->header('Authorization');
+        $session = UserSession::where('token', $header)->first();
+        if (!@$session) {
+            return response()->json([
+                'message' => 'No Session Found'],
+                201);
+        }
+        $user = User::find($session->user_id);
+        if (!$user) {
+            return response()->json(['message' => 'Access', 'error' => 'Invalid Account Access'], 201);
+        }
+        $balance = WalletTradingBalance($user->id);
         if ($balance == null) {
             $bl = 0;
         } else {
@@ -258,6 +424,7 @@ class ApiWalletClientController extends Controller
     }
     public function transferPost(Request $request)
     {
+
         $validator = Validator::make($request->all(), [
             'amount' => 'required|numeric|min:0.1',
             'email' => 'required|string|email',
@@ -270,24 +437,35 @@ class ApiWalletClientController extends Controller
             'email.required' => 'The email field is required.',
 
         ]);
-        // Check if validation fails
         if ($validator->fails()) {
             return response()->json(['message' => 'Invalid input', 'error' => $validator->errors()], 201);
         }
 
-        if (walletBalance(auth()->user()->id) < $request->amount) {
+        $header = $request->header('Authorization');
+        $session = UserSession::where('token', $header)->first();
+        if (!@$session) {
+            return response()->json([
+                'message' => 'No Session Found'],
+                201);
+        }
+        $user = User::find($session->user_id);
+        if (!$user) {
+            return response()->json(['message' => 'Invalid input', 'error' => 'Invalid Account Access'], 201);
+        }
+
+        if (walletBalance($user->id) < $request->amount) {
             return response()->json(['message' => 'Invalid input', 'error' => 'Insufficient balance'], 201);
         }
 
-        $receiver = User::where('email', $request->email)->where('email', '!=', auth()->user()->email)->first();
+        $receiver = User::where('email', $request->email)->where('email', '!=', $user->email)->first();
         if (!$receiver) {
             return response()->json(['message' => 'Receiver email not found'], 201);
         }
-        if (auth()->user()->google2fa_enable != 'Yes') {
+        if ($user->google2fa_enable != 'Yes') {
             return response()->json(['message' => '2FA Authenticator is disable'], 201);
         }
         $google2fa = app('pragmarx.google2fa');
-        $oneCode = $google2fa->verifyKey(auth()->user()->google2fa_secret, $request->code);
+        $oneCode = $google2fa->verifyKey($user->google2fa_secret, $request->code);
         if (!$oneCode) {
             return response()->json(['message' => 'Invalid 2FA Code'], 201);
         }
@@ -296,13 +474,13 @@ class ApiWalletClientController extends Controller
         $wallet->user_id = $receiver->id;
         $wallet->trx = Str::uuid();
         $wallet->amount = $request->amount;
-        $wallet->description = 'Transfer from ' . auth()->user()->email;
+        $wallet->description = 'Transfer from ' . $user->email;
         $wallet->memo = $request->input('memo');
         $wallet->type = 'In';
         $wallet->save();
 
         $walletSender = new Wallet();
-        $walletSender->user_id = auth()->user()->id;
+        $walletSender->user_id = $user->id;
         $walletSender->trx = $wallet->trx;
         $walletSender->amount = $request->amount;
         $walletSender->description = 'Transfer to ' . $receiver->email;
@@ -310,8 +488,8 @@ class ApiWalletClientController extends Controller
         $walletSender->type = 'Out';
         $walletSender->save();
 
-        $senderName = auth()->user()->first_name;
-        $senderEmail = auth()->user()->email;
+        $senderName = $user->first_name;
+        $senderEmail = $user->email;
         $sendAmount = $request->amount;
         $cost = 0;
         $receiveAmount = $request->amount;
@@ -376,7 +554,7 @@ class ApiWalletClientController extends Controller
     {
 
         if (@$_GET['limit']) {
-            $wallets = Exchange::where('user_id', auth()->user()->id)->orderby('id', 'desc')->paginate($_GET['limit']);
+            $wallets = Exchange::where('user_id', $user->id)->orderby('id', 'desc')->paginate($_GET['limit']);
             return response()->json([
                 'items' => $wallets,
                 'limit' => @$_GET['limit'],
@@ -384,7 +562,7 @@ class ApiWalletClientController extends Controller
             ],
                 200);
         } else {
-            $wallets = Exchange::where('user_id', auth()->user()->id)->orderby('id', 'desc')->paginate(10);
+            $wallets = Exchange::where('user_id', $user->id)->orderby('id', 'desc')->paginate(10);
             return response()->json([
                 'items' => $wallets,
                 'message' => 'Success',
@@ -408,14 +586,14 @@ class ApiWalletClientController extends Controller
             return response()->json(['message' => 'Invalid input', 'error' => $validator->errors()], 201);
         }
 
-        if (WalletTradingBalance(auth()->user()->id) < $request->amount) {
+        if (WalletTradingBalance($user->id) < $request->amount) {
             return response()->json(['message' => 'Invalid input', 'error' => 'Insufficient balance'], 201);
         }
 
         $trx = Str::uuid();
         $exchange = new WalletTrading();
         $exchange->trx = $trx;
-        $exchange->user_id = auth()->user()->id;
+        $exchange->user_id = $user->id;
         $exchange->type = 'Out';
         $exchange->amount = $request->amount;
         $exchange->description = 'Exchange to wallet';
@@ -423,7 +601,7 @@ class ApiWalletClientController extends Controller
 
         $history = new Exchange();
         $history->trx = $trx;
-        $history->user_id = auth()->user()->id;
+        $history->user_id = $user->id;
         $history->amount = $request->amount;
         $history->type = 'Transfer out';
         $history->status = 'Accept';
@@ -432,7 +610,7 @@ class ApiWalletClientController extends Controller
 
         $wallet = new Wallet();
         $wallet->trx = $trx;
-        $wallet->user_id = auth()->user()->id;
+        $wallet->user_id = $user->id;
         $wallet->amount = $request->amount;
         $wallet->description = 'Transfer from Live Account';
         $wallet->type = 'In';
@@ -454,7 +632,7 @@ class ApiWalletClientController extends Controller
             return response()->json(['message' => 'Invalid input', 'error' => $validator->errors()], 201);
         }
 
-        if (walletBalance(auth()->user()->id) < $request->amount) {
+        if (walletBalance($user->id) < $request->amount) {
             return response()->json(['message' => 'Insufficient balance', 'error' => 'Insufficient balance'], 201);
         }
 
@@ -462,7 +640,7 @@ class ApiWalletClientController extends Controller
 
         $exchange = new WalletTrading();
         $exchange->trx = $trx;
-        $exchange->user_id = auth()->user()->id;
+        $exchange->user_id = $user->id;
         $exchange->type = 'In';
         $exchange->amount = $request->amount;
         $exchange->description = 'From Wallet Exchange';
@@ -470,7 +648,7 @@ class ApiWalletClientController extends Controller
 
         $history = new Exchange();
         $history->trx = $trx;
-        $history->user_id = auth()->user()->id;
+        $history->user_id = $user->id;
         $history->amount = $request->amount;
         $history->type = 'Transfer In';
         $history->status = 'Accept';
@@ -479,7 +657,7 @@ class ApiWalletClientController extends Controller
 
         $wallet = new Wallet();
         $wallet->trx = $trx;
-        $wallet->user_id = auth()->user()->id;
+        $wallet->user_id = $user->id;
         $wallet->amount = $request->amount;
         $wallet->description = 'Transfer to Live Account';
         $wallet->type = 'Out';

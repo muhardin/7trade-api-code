@@ -1,13 +1,13 @@
 <?php
 
 use App\Models\User;
-function AlphaCreateAddress($coin, $network, $merchantId)
+function AlphaCreateAddress($coin, $network, $merchantId, $userId)
 {
     /**
-    $coin = 'USDT';
+    $coin    = 'USDT';
     $network = 'ethereum-erc20';
      */
-    $user = User::find(auth()->user()->id);
+    $user = User::find($userId);
     if (@$user->last_name) {
         $lastName = $user->last_name;
     } else {
@@ -16,9 +16,10 @@ function AlphaCreateAddress($coin, $network, $merchantId)
     }
     $merchantId = '5txf8mc-aklnryz7-tr5gkq-b3gn';
     $secret_key = 'sst1707729946179068463615175197';
+
     $bodyData = [
         'currency' => $coin,
-        'callbackURL' => 'https://jualanyuk.shop/callback/alphapays',
+        'callbackURL' => 'https://7trade.pro/callback/alphapays',
         'blockchainNetwork' => $network,
         'userId' => $user->id,
         'userName' => $user->client_code,
@@ -263,21 +264,22 @@ function AlphaCheckWd($txId)
 
     $result = curl_exec($ch);
     curl_close($ch);
-    // return json_decode($result, false);
-    return json_decode('{
-        "success": true,
-        "transaction": {
-          "txId": "pz-421804",
-          "currency": "BTC",
-          "blockchainNetwork": "bitcoin",
-          "hash": "056b04392ea2a62be8fe68b0fe1187a71d8086e1dc5bcb42526b6c234be22784",
-          "confirmationNo": 3,
-          "amount": 0.0003485,
-          "ts": 1683655562,
-          "status": "completed",
-          "fiatAmount": "13.02",
-          "fiatCurrency": "USD",
-          "merchantOrderId": "11114"
-        }
-      }', false);
+    return json_decode($result, false);
+    // return json_decode('{
+    //     "success": true,
+    //     "transaction": {
+    //       "txId": "pz-421804",
+    //       "currency": "BTC",
+    //       "blockchainNetwork": "bitcoin",
+    //       "hash": "056b04392ea2a62be8fe68b0fe1187a71d8086e1dc5bcb42526b6c234be22784",
+    //       "confirmationNo": 3,
+    //       "amount": 0.0003485,
+    //       "ts": 1683655562,
+    //       "status": "completed",
+    //       "fiatAmount": "13.02",
+    //       "fiatCurrency": "USD",
+    //       "merchantOrderId": "11114"
+    //     }
+    //   }', false);
+
 }

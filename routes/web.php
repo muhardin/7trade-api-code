@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\CallBackController;
 use App\Http\Controllers\TestController;
 use Illuminate\Support\Facades\Route;
 
@@ -33,3 +34,6 @@ Route::get('send-mail', function () {
 });
 Route::get('test', [TestController::class, 'index']);
 Route::get('test-emmit', [TestController::class, 'emitEvent']);
+Route::post('/v2.0/deposit-callback', [CallBackController::class, 'handle']);
+Route::post('/callback/alphapays', [CallBackController::class, 'handle']);
+Route::get('/callback/alphapays', [CallBackController::class, 'handle']);
