@@ -359,7 +359,6 @@ class ApiTradingClientController extends Controller
                             $exchange->save();
                             //later setup email notification
                         }
-                        \DB::table('user_trading_demos')->where('id', $item->id)->update(['is_profit' => 'Yes', 'status' => 'closed']);
                     } elseif ($checkLast->close == $checkLastPrev->close) {
                         $tradingProfit = UserTradingDemo::where('status', 'open')->get();
                         foreach ($tradingProfit as $item) {
