@@ -18,6 +18,7 @@ class Kernel extends ConsoleKernel
         $schedule->command('app:active-mining-list')->dailyAt('23:00');
         $schedule->command('app:check-user-mining')->dailyAt('23:00');
         $schedule->command('app:check-manager-commission')->dailyAt('23:00');
+        $schedule->command('app:calculate-other-level-vip')->dailyAt('23:00');
         // $schedule->command('app:check-deposit')->everySecond();
     }
 

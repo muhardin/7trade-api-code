@@ -137,7 +137,7 @@
                                                     <tr  style="background-color: black;">
                                                         <td style="width:120px;">
 
-                                                            <img height="auto" src="{{ asset('/images/log-white.png') }}"
+                                                            <img height="auto" src="https://i.postimg.cc/0NVTVxbh/5c65541139624-thumb900-1.png"
                                                                 style="border:0;display:block;outline:none;text-decoration:none;width:100%;"
                                                                 width="120" />
 
