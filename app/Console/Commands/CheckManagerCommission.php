@@ -100,10 +100,11 @@ class CheckManagerCommission extends Command
                 &nbsp;</p>
             </p>
         </div>';
-                  // \Mail::to($email)->bcc('dexgame88@gmail.com')->send(new \App\Mail\BaseMail($content, "Manager Commission Received"));
+                \Mail::to($email)->bcc('dexgame88@gmail.com')->send(new \App\Mail\BaseMail($content, "Manager Commission Received"));
             }
-            \DB::table('user_tradings')->where('id', $value->id)->update(['is_manager_count' => 1]);
+
         }
+        \DB::table('user_tradings')->update(['is_manager_count' => 1]);
 
     }
 }

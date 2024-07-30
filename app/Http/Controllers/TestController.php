@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\CryptoPrice;
 use App\Models\StreakChallenge;
 use App\Models\User;
+use App\Models\UserMining;
 use App\Models\UserStreak;
 use App\Models\UserTrading;
+use App\Models\Wallet;
 use App\Services\SocketIOService;
 use Carbon\Carbon;
 use ElephantIO\Client;
@@ -80,6 +82,41 @@ class TestController extends Controller
     }
     public function index()
     {
+        $userMinings = UserMining::where('status', 'Active')
+            ->whereDate('active_date', '<=', Carbon::now())
+            ->whereDate('expire_date', '>=', Carbon::now())
+            ->where('User_id', 27)
+            ->get();
+        $trx = Str::uuid();
+        foreach ($userMinings as $item) {
+            $chkWalletMining = WalletMining::where('user_id', $item->user_id)->where('user_mining_id', $item->id)->whereDate('created_at', Carbon::now())->first();
+            if (!@$chkWalletMining) {
+                $netProfit = $item->daily_profit - ($item->daily_profit * $item->service_fee / 100);
+                $walletMining = new WalletMining();
+                $walletMining->user_id = $item->user_id;
+                $walletMining->trx = $trx;
+                $walletMining->user_mining_id = $item->id;
+                $walletMining->amount = $netProfit;
+                $walletMining->type = 'In';
+                $walletMining->service_value = $item->service_fee;
+                $walletMining->service_fee = $item->daily_profit * $item->service_fee / 100;
+                $walletMining->value = $item->daily_profit;
+                $walletMining->description = 'Daily Mining Profit';
+                $walletMining->save();
+
+                $wallet = new Wallet();
+                $wallet->user_id = $item->user_id;
+                $wallet->trx = $trx;
+                $wallet->amount = $walletMining->amount;
+                $wallet->description = 'Daily Mining Profit';
+                $wallet->type = 'In';
+                $wallet->save();
+
+                //send email
+            }
+
+        }
+        dd('_');
         // $data = BbCreateAddress();
         $data = BbWd();
         // $data = BbGetAddressTransaction();
